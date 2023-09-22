@@ -27,6 +27,11 @@ import shortuuid
 import tiktoken
 import uvicorn
 
+import openai
+import anthropic
+import vertexai  # pip3 install google-cloud-aiplatform
+from vertexai.preview.language_models import ChatModel
+
 from fastchat.constants import (
     WORKER_API_TIMEOUT,
     WORKER_API_EMBEDDING_BATCH_SIZE,
@@ -64,6 +69,7 @@ from fastchat.protocol.api_protocol import (
 logger = logging.getLogger(__name__)
 
 conv_template_map = {}
+model_outside_list = []
 
 fetch_timeout = aiohttp.ClientTimeout(total=3 * 3600)
 
@@ -134,7 +140,7 @@ async def check_model(request) -> Optional[JSONResponse]:
     controller_address = app_settings.controller_address
     ret = None
 
-    models = await fetch_remote(controller_address + "/list_models", None, "models")
+    models = model_outside_list + await fetch_remote(controller_address + "/list_models", None, "models")
     if request.model not in models:
         ret = create_error_response(
             ErrorCode.INVALID_MODEL,
@@ -330,8 +336,8 @@ async def get_conv(model_name: str, worker_addr: str):
 @app.get("/v1/models", dependencies=[Depends(check_api_key)])
 async def show_available_models():
     controller_address = app_settings.controller_address
-    ret = await fetch_remote(controller_address + "/refresh_all_workers")
-    models = await fetch_remote(controller_address + "/list_models", None, "models")
+    _ = await fetch_remote(controller_address + "/refresh_all_workers")
+    models = model_outside_list + await fetch_remote(controller_address + "/list_models", None, "models")
 
     models.sort()
     # TODO: return real model permission details
@@ -350,6 +356,58 @@ async def create_chat_completion(request: ChatCompletionRequest):
     error_check_ret = check_requests(request)
     if error_check_ret is not None:
         return error_check_ret
+
+    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
+        openai.api_key = os.environ["OPENAI_API_KEY"]
+        res = openai.ChatCompletion.create(
+            model = request.model,
+            messages = request.messages,
+            temperature = request.temperature,
+            max_tokens = request.max_tokens,
+            stream = request.stream
+        )
+        if request.stream == True:
+            def _generator():
+                for chunk in res:
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            return StreamingResponse(_generator(), media_type="text/event-stream")
+        else:
+            return res
+
+    elif request.model == "claude-2" or request.model == "claude-instant-1":
+        c = anthropic.Anthropic(api_key=os.environ("ANTHROPIC_API_KEY"))
+        # TODO Adjust the prompt format to fit the model's inference
+        res = c.completions.create(
+            prompt="",
+            stop_sequences=[anthropic.HUMAN_PROMPT],
+            max_tokens_to_sample=request.max_tokens,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            model=request.model,
+            stream=request.stream,
+        )
+        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API.")
+
+    elif request.model == "palm-2":
+        parameters = {
+            "temperature": request.temperature,
+            "top_p": request.top_p,
+            "max_output_tokens": request.max_tokens
+        }
+        project_id = os.environ["GCP_PROJECT_ID"]
+        location = "us-central1"
+        vertexai.init(project=project_id, location=location)
+
+        # According to release note, "chat-bison@001" is PaLM 2 for chat.
+        # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
+        chat_model = ChatModel.from_pretrained("chat-bison@001")
+        chat = chat_model.start_chat(examples=[])
+
+        # TODO Adjust the prompt format to fit the model's inference
+        res = chat.sent_message(request.messages, **parameters)
+        content = res.text
+        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API.")
+
 
     worker_addr = await get_worker_address(request.model)
 
@@ -787,6 +845,21 @@ def create_openai_api_server():
         "--controller-address", type=str, default="http://localhost:21001"
     )
     parser.add_argument(
+        "--add-chatgpt",
+        action="store_true",
+        help="Add OpenAI's ChatGPT models (gpt-3.5-turbo, gpt-4)",
+    )
+    parser.add_argument(
+        "--add-claude",
+        action="store_true",
+        help="Add Anthropic's Claude models (claude-2, claude-instant-1)",
+    )
+    parser.add_argument(
+        "--add-palm",
+        action="store_true",
+        help="Add Google's PaLM model (PaLM 2 for Chat: chat-bison@001)",
+    )
+    parser.add_argument(
         "--allow-credentials", action="store_true", help="allow credentials"
     )
     parser.add_argument(
@@ -814,6 +887,16 @@ def create_openai_api_server():
     )
     app_settings.controller_address = args.controller_address
     app_settings.api_keys = args.api_keys
+
+    global model_outside_list
+    if args.add_chatgpt:
+        model_outside_list += ["gpt-3.5-turbo", "gpt-4"]
+    if args.add_claude:
+        model_outside_list += ["claude-2", "claude-instant-1"]
+    if args.add_palm:
+        model_outside_list += ["palm-2"]
+
+    # TODO do api check here for outside model
 
     logger.info(f"args: {args}")
     return args
