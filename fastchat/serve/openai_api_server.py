@@ -363,8 +363,14 @@ async def create_chat_completion(request: ChatCompletionRequest):
             model = request.model,
             messages = request.messages,
             temperature = request.temperature,
+            top_p = request.top_p,
+            n = request.n,
             max_tokens = request.max_tokens,
-            stream = request.stream
+            stop = request.stop,
+            stream = request.stream,
+            presence_penalty = request.presence_penalty,
+            frequency_penalty = request.frequency_penalty,
+            user = request.user or ""
         )
         if request.stream == True:
             def _generator():
