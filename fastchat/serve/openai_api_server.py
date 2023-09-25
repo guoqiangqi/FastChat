@@ -357,6 +357,9 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if error_check_ret is not None:
         return error_check_ret
 
+    if request.model == "gpt-3.5-turbo-instruct":
+        return create_error_response(400, "model gpt-3.5-turbo-instruct only can access with Completions api not ChatCompletions")
+
     if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
         openai.api_key = os.environ["OPENAI_API_KEY"]
         res = openai.ChatCompletion.create(
@@ -535,6 +538,35 @@ async def create_completion(request: CompletionRequest):
     error_check_ret = check_requests(request)
     if error_check_ret is not None:
         return error_check_ret
+
+    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
+        return create_error_response(400, "model gpt-3.5-turbo and gpt-4 only can access with Completions api not ChatCompletions")
+
+    if request.model == "gpt-3.5-turbo-instruct":
+        openai.api_key = os.environ["OPENAI_API_KEY"]
+        res = openai.Completion.create(
+            model = request.model,
+            prompt= request.prompt,
+            suffix = request.suffix,
+            temperature = request.temperature,
+            n = request.n,
+            max_tokens = request.max_tokens,
+            stop = request.stop,
+            stream = request.stream,
+            top_p = request.top_p,
+            logprobs = request.logprobs,
+            echo = request.echo,
+            presence_penalty = request.presence_penalty,
+            frequency_penalty = request.frequency_penalty,
+            user = request.user or ""
+        )
+        if request.stream == True:
+            def _generator():
+                for chunk in res:
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            return StreamingResponse(_generator(), media_type="text/event-stream")
+        else:
+            return res
 
     request.prompt = process_input(request.model, request.prompt)
 
@@ -897,7 +929,7 @@ def create_openai_api_server():
 
     global model_outside_list
     if args.add_chatgpt:
-        model_outside_list += ["gpt-3.5-turbo", "gpt-4"]
+        model_outside_list += ["gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-4"]
     if args.add_claude:
         model_outside_list += ["claude-2", "claude-instant-1"]
     if args.add_palm:
