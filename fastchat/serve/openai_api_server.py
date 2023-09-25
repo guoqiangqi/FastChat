@@ -386,7 +386,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             model=request.model,
             stream=request.stream,
         )
-        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API.")
+        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API Key.")
 
     elif request.model == "palm-2":
         parameters = {
@@ -406,7 +406,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         # TODO Adjust the prompt format to fit the model's inference
         res = chat.sent_message(request.messages, **parameters)
         content = res.text
-        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API.")
+        raise NotImplementedError("This part has not been fully implemented due to the lack of a testing API Key.")
 
 
     worker_addr = await get_worker_address(request.model)
@@ -477,19 +477,19 @@ async def chat_completion_stream_generator(
         # First chunk with role
         choice_data = ChatCompletionResponseStreamChoice(
             index=i,
-            delta=DeltaMessage(role="assistant"),
+            delta=DeltaMessage(role="assistant", content=""),
             finish_reason=None,
         )
         chunk = ChatCompletionStreamResponse(
             id=id, choices=[choice_data], model=model_name
         )
-        yield f"data: {chunk.json(exclude_unset=True, ensure_ascii=False)}\n\n"
+        yield f"data: {chunk.json(exclude_unset=False, ensure_ascii=False)}\n\n"
 
         previous_text = ""
         async for content in generate_completion_stream(gen_params, worker_addr):
             if content["error_code"] != 0:
                 yield f"data: {json.dumps(content, ensure_ascii=False)}\n\n"
-                yield "data: [DONE]\n\n"
+                # yield "data: [DONE]\n\n"
                 return
             decoded_unicode = content["text"].replace("\ufffd", "")
             delta_text = decoded_unicode[len(previous_text) :]
@@ -503,7 +503,7 @@ async def chat_completion_stream_generator(
                 delta_text = None
             choice_data = ChatCompletionResponseStreamChoice(
                 index=i,
-                delta=DeltaMessage(content=delta_text),
+                delta=DeltaMessage(role="assistant", content=delta_text),
                 finish_reason=content.get("finish_reason", None),
             )
             chunk = ChatCompletionStreamResponse(
@@ -511,13 +511,14 @@ async def chat_completion_stream_generator(
             )
             if delta_text is None:
                 if content.get("finish_reason", None) is not None:
+                    chunk.choices[0].delta.role=None
                     finish_stream_events.append(chunk)
                 continue
-            yield f"data: {chunk.json(exclude_unset=True, ensure_ascii=False)}\n\n"
+            yield f"data: {chunk.json(exclude_unset=False, ensure_ascii=False)}\n\n"
     # There is not "content" field in the last delta message, so exclude_none to exclude field "content".
     for finish_chunk in finish_stream_events:
         yield f"data: {finish_chunk.json(exclude_none=True, ensure_ascii=False)}\n\n"
-    yield "data: [DONE]\n\n"
+    # yield "data: [DONE]\n\n"
 
 
 @app.post("/v1/completions", dependencies=[Depends(check_api_key)])
