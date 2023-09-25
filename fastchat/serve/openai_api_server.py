@@ -357,6 +357,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if error_check_ret is not None:
         return error_check_ret
 
+    # Support for openAI official ChatCompletions API calls here.
     if request.model == "gpt-3.5-turbo-instruct":
         return create_error_response(400, "model gpt-3.5-turbo-instruct only can access with Completions api not ChatCompletions")
 
@@ -539,6 +540,7 @@ async def create_completion(request: CompletionRequest):
     if error_check_ret is not None:
         return error_check_ret
 
+    # Support for openAI official Completions API calls here.
     if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
         return create_error_response(400, "model gpt-3.5-turbo and gpt-4 only can access with Completions api not ChatCompletions")
 
@@ -711,6 +713,7 @@ async def generate_completion(payload: Dict[str, Any], worker_addr: str):
 @app.post("/v1/embeddings", dependencies=[Depends(check_api_key)])
 @app.post("/v1/engines/{model_name}/embeddings", dependencies=[Depends(check_api_key)])
 async def create_embeddings(request: EmbeddingsRequest, model_name: str = None):
+    # TODO: Add support for openAI official embedding API calls here."
     """Creates embeddings for the text"""
     if request.model is None:
         request.model = model_name
