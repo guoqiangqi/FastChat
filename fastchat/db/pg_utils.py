@@ -12,7 +12,7 @@ PGSQL_USER = os.environ["PGSQL_USER"]
 PGSQL_PASSWORD = os.environ["PGSQL_PASSWORD"]
 PGSQL_DBNAME = os.environ["PGSQL_DBNAME"]
 
-def write_qa_to_db(question, answer, table_name):
+def write_qa_to_db(question, answer, user="default_user", pair_id="0", reaction="no reaction", table_name=PGSQL_DBNAME):
     
     try:
         conn = psycopg2.connect(host=PGSQL_HOST, port=PQSQL_PORT, database=PGSQL_DBNAME, user=PGSQL_USER, password=PGSQL_PASSWORD)
@@ -27,7 +27,7 @@ def write_qa_to_db(question, answer, table_name):
         success = create_table(conn, table_name)
         if not success:
             return
-    insert_data(conn, table_name, question, answer)
+    insert_data(conn, table_name, question, answer, user, pair_id, reaction)
 
     conn.close()
 
@@ -49,6 +49,9 @@ def create_table(conn, table_name):
             id SERIAL PRIMARY KEY,
             questions TEXT NOT NULL,
             answers TEXT NOT NULL,
+            user_name TEXT NOT NULL,
+            pair_id TEXT NOT NULL,
+            reaction TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """
@@ -62,11 +65,11 @@ def create_table(conn, table_name):
          logger.info(f"Error creating table {table_name}: ", str(e))
          return False
         
-def insert_data(conn, table_name, question, answer):
-    insert_sql = f"INSERT INTO {table_name} (questions, answers) VALUES (%s, %s)"
+def insert_data(conn, table_name, question, answer, user, pair_id, reaction):
+    insert_sql = f"INSERT INTO {table_name} (questions, answers, user_name, pair_id, reaction) VALUES (%s, %s, %s, %s, %s)"
     try:
         with conn.cursor() as cursor:
-            cursor.execute(insert_sql, (question, answer))
+            cursor.execute(insert_sql, (question, answer, user, pair_id, reaction))
 
         conn.commit()
         logger.info("Data inserted successfully!")
@@ -97,4 +100,4 @@ def init_db(database):
 
 if __name__ == "__main__":
     init_db(PGSQL_DBNAME)
-    write_qa_to_db("What is your name?", "My name is OSS-Compass-Chat", "qa_table")
+    write_qa_to_db("What is your name?", "My name is OSS-Compass-Chat")
