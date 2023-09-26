@@ -1,7 +1,7 @@
 import os
 import psycopg2
 import sys
-sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+
 from fastchat.utils import build_logger
 
 logger = build_logger("db", "db.log")
