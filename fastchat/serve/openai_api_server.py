@@ -66,6 +66,8 @@ from fastchat.protocol.api_protocol import (
     APITokenCheckResponseItem,
 )
 
+from fastchat.db.pg_utils import init_db, write_qa_to_db, PGSQL_DBNAME
+
 logger = logging.getLogger(__name__)
 
 conv_template_map = {}
@@ -378,10 +380,16 @@ async def create_chat_completion(request: ChatCompletionRequest):
         )
         if request.stream == True:
             def _generator():
+                answer = [""]*request.n
                 for chunk in res:
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                    choice = chunk["choices"][0]
+                    answer[choice["index"]] += choice["delta"]["content"] if content in choice["delta"] else ""
+                write_qa_to_db(request.messages, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
             return StreamingResponse(_generator(), media_type="text/event-stream")
         else:
+            answer = [ choice["message"]["content"] for choice in res["choices"] ]
+            write_qa_to_db(request.messages, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, user=request.user or "default_user")
             return res
 
     elif request.model == "claude-2" or request.model == "claude-instant-1":
@@ -437,6 +445,9 @@ async def create_chat_completion(request: ChatCompletionRequest):
         gen_params["max_new_tokens"],
         worker_addr,
     )
+
+    gen_params["user"] = request.user
+    
     if error_check_ret is not None:
         return error_check_ret
 
@@ -456,6 +467,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
     except Exception as e:
         return create_error_response(ErrorCode.INTERNAL_ERROR, str(e))
     usage = UsageInfo()
+    
+    answer = [""] * request.n
     for i, content in enumerate(all_tasks):
         if content["error_code"] != 0:
             return create_error_response(content["error_code"], content["text"])
@@ -466,11 +479,13 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 finish_reason=content.get("finish_reason", "stop"),
             )
         )
+        answer[i] += content["text"]
         if "usage" in content:
             task_usage = UsageInfo.parse_obj(content["usage"])
             for usage_key, usage_value in task_usage.dict().items():
                 setattr(usage, usage_key, getattr(usage, usage_key) + usage_value)
 
+    write_qa_to_db(gen_params["prompt"], " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, user=request.user or "default_user")
     return ChatCompletionResponse(model=request.model, choices=choices, usage=usage)
 
 
@@ -483,6 +498,7 @@ async def chat_completion_stream_generator(
     """
     id = f"chatcmpl-{shortuuid.random()}"
     finish_stream_events = []
+    answer = [""] * n
     for i in range(n):
         # First chunk with role
         choice_data = ChatCompletionResponseStreamChoice(
@@ -500,6 +516,8 @@ async def chat_completion_stream_generator(
             if content["error_code"] != 0:
                 yield f"data: {json.dumps(content, ensure_ascii=False)}\n\n"
                 # yield "data: [DONE]\n\n"
+                answer[i] += content["text"]
+                write_qa_to_db(gen_params["prompt"], " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), gen_params["model"], gen_params["user"] or "default_user")
                 return
             decoded_unicode = content["text"].replace("\ufffd", "")
             delta_text = decoded_unicode[len(previous_text) :]
@@ -525,10 +543,12 @@ async def chat_completion_stream_generator(
                     finish_stream_events.append(chunk)
                 continue
             yield f"data: {chunk.json(exclude_unset=False, ensure_ascii=False)}\n\n"
+            answer[i] += delta_text
     # There is not "content" field in the last delta message, so exclude_none to exclude field "content".
     for finish_chunk in finish_stream_events:
         yield f"data: {finish_chunk.json(exclude_none=True, ensure_ascii=False)}\n\n"
     # yield "data: [DONE]\n\n"
+    write_qa_to_db(gen_params["prompt"], " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), gen_params["model"], gen_params["user"] or "default_user")
 
 
 @app.post("/v1/completions", dependencies=[Depends(check_api_key)])
@@ -945,5 +965,6 @@ def create_openai_api_server():
 
 
 if __name__ == "__main__":
+    init_db(PGSQL_DBNAME)
     args = create_openai_api_server()
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
