@@ -6,11 +6,11 @@ from fastchat.utils import build_logger
 
 logger = build_logger("db", "db.log")
 
-PGSQL_HOST = os.getenv("PGSQL_HOST")
-PQSQL_PORT = os.getenv("PGSQL_PORT")
-PGSQL_USER = os.getenv("PGSQL_USER")
-PGSQL_PASSWORD = os.getenv("PGSQL_PASSWORD")
-PGSQL_DBNAME = os.getenv("PGSQL_DBNAME")
+PGSQL_HOST = os.environ["PGSQL_HOST"]
+PQSQL_PORT = os.environ["PGSQL_PORT"]
+PGSQL_USER = os.environ["PGSQL_USER"]
+PGSQL_PASSWORD = os.environ["PGSQL_PASSWORD"]
+PGSQL_DBNAME = os.environ["PGSQL_DBNAME"]
 
 def write_qa_to_db(question, answer, table_name):
     
