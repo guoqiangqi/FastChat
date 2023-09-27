@@ -584,10 +584,16 @@ async def create_completion(request: CompletionRequest):
         )
         if request.stream == True:
             def _generator():
+                answer = [""] * request.n
                 for chunk in res:
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                    choice = chunk["choices"][0]
+                    answer[choice["index"]] += choice["text"]
+                write_qa_to_db(request.prompt, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
             return StreamingResponse(_generator(), media_type="text/event-stream")
         else:
+            answer = [ choice["text"] for choice in res["choices"] ]
+            write_qa_to_db(request.prompt, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
             return res
 
     request.prompt = process_input(request.model, request.prompt)
@@ -623,13 +629,14 @@ async def create_completion(request: CompletionRequest):
                     generate_completion(gen_params, worker_addr)
                 )
                 text_completions.append(content)
-
         try:
             all_tasks = await asyncio.gather(*text_completions)
         except Exception as e:
             return create_error_response(ErrorCode.INTERNAL_ERROR, str(e))
 
         choices = []
+        prompt_length = len(request.prompt)
+        answer = [ [""] * request.n ] * prompt_length
         usage = UsageInfo()
         for i, content in enumerate(all_tasks):
             if content["error_code"] != 0:
@@ -642,10 +649,12 @@ async def create_completion(request: CompletionRequest):
                     finish_reason=content.get("finish_reason", "stop"),
                 )
             )
+            answer[int(i/request.n)][int(i%request.n)] += content["text"]
             task_usage = UsageInfo.parse_obj(content["usage"])
             for usage_key, usage_value in task_usage.dict().items():
                 setattr(usage, usage_key, getattr(usage, usage_key) + usage_value)
-
+        for i, text in enumerate(request.prompt):
+            write_qa_to_db(text, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer[i]), request.model, request.user or "default_user")
         return CompletionResponse(
             model=request.model, choices=choices, usage=UsageInfo.parse_obj(usage)
         )
@@ -658,6 +667,7 @@ async def generate_completion_stream_generator(
     id = f"cmpl-{shortuuid.random()}"
     finish_stream_events = []
     for text in request.prompt:
+        answer = [""] * n
         for i in range(n):
             previous_text = ""
             gen_params = await get_gen_params(
@@ -674,6 +684,8 @@ async def generate_completion_stream_generator(
                 if content["error_code"] != 0:
                     yield f"data: {json.dumps(content, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
+                    answer[i] += content["text"]
+                    write_qa_to_db(text, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
                     return
                 decoded_unicode = content["text"].replace("\ufffd", "")
                 delta_text = decoded_unicode[len(previous_text) :]
@@ -700,6 +712,8 @@ async def generate_completion_stream_generator(
                         finish_stream_events.append(chunk)
                     continue
                 yield f"data: {chunk.json(exclude_unset=True, ensure_ascii=False)}\n\n"
+                answer[i] += delta_text
+        write_qa_to_db(text, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
     # There is not "content" field in the last delta message, so exclude_none to exclude field "content".
     for finish_chunk in finish_stream_events:
         yield f"data: {finish_chunk.json(exclude_unset=True, ensure_ascii=False)}\n\n"
