@@ -2,12 +2,13 @@ FROM python:3.9
 WORKDIR /app
 COPY . /app
 
-RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pyinstaller --onefile fastchat/serve/openai_api_server.py
+RUN echo \
+    "openai==0.28.0\n\
+    google-cloud-aiplatform \n\
+    psycopg2 \n\
+    anthropic==0.3.11" >> requirements.txt && \
+    pip3 install --no-cache-dir -r requirements.txt
 
-FROM alpine:3.18
-WORKDIR /app
-COPY --from=0 /app/dist/api_server /app
-
+ENV PYTHONPATH=/app
 # Run controller
-CMD ["api_server", "--host localhost", "--port 8000", "--add-chatgpt"]
+CMD ["python3", "fastchat/serve/openai_api_server.py", "--host=127.0.0.1", "--port=8000", "--add-chatgpt"]
