@@ -16,4 +16,4 @@ RUN apt-get update -y && apt-get install -y python3.9 python3.9-distutils curl &
 
 ENV PYTHONPATH=/app
 
-CMD ["python3", "fastchat/serve/model_worker.py", "--model-path=/vicuna-7b-v1.5", "--controller=http://localhost:21001", "--worker=http://localhost:31000", "--port=31000"]
+CMD ["python3", "fastchat/serve/model_worker.py", "--model-path=lmsys/vicuna-7b-v1.5", "--controller=http://localhost:21001", "--worker=http://localhost:31000", "--port=31000"]
