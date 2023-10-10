@@ -3,7 +3,7 @@ WORKDIR /app
 COPY . /app
 
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pyinstaller --off-line fastchat/serve/model_worker.py
+    pyinstaller --onefile fastchat/serve/model_worker.py
 
 FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04
 

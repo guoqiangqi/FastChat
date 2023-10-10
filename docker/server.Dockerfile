@@ -3,7 +3,7 @@ WORKDIR /app
 COPY . /app
 
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pyinstaller --off-line fastchat/serve/openai_api_server.py
+    pyinstaller --onefile fastchat/serve/openai_api_server.py
 
 FROM alpine:3.18
 WORKDIR /app

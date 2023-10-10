@@ -3,7 +3,7 @@ WORKDIR /app
 COPY . /app
 
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pyinstaller --off-line fastchat/serve/controller.py
+    pyinstaller --onefile fastchat/serve/controller.py
 
 FROM alpine:3.18
 WORKDIR /app
