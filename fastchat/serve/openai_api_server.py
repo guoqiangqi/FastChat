@@ -385,11 +385,11 @@ async def create_chat_completion(request: ChatCompletionRequest):
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                     choice = chunk["choices"][0]
                     answer[choice["index"]] += choice["delta"]["content"] if "content" in choice["delta"] else ""
-                write_qa_to_db(request.messages, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
+                write_qa_to_db(str(request.messages), " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, request.user or "default_user")
             return StreamingResponse(_generator(), media_type="text/event-stream")
         else:
             answer = [ choice["message"]["content"] for choice in res["choices"] ]
-            write_qa_to_db(request.messages, " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, user=request.user or "default_user")
+            write_qa_to_db(str(request.messages), " [This-is-a-string-tag-for-answer-index-seperate] ".join(answer), request.model, user=request.user or "default_user")
             return res
 
     elif request.model == "claude-2" or request.model == "claude-instant-1":
