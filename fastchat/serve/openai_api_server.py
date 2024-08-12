@@ -363,7 +363,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if request.model == "gpt-3.5-turbo-instruct":
         return create_error_response(400, "model gpt-3.5-turbo-instruct only can access with Completions api not ChatCompletions")
 
-    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
+    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4" or request.model == "gpt-4o-mini":
         openai.api_key = os.environ["OPENAI_API_KEY"]
         res = openai.ChatCompletion.create(
             model = request.model,
@@ -561,8 +561,8 @@ async def create_completion(request: CompletionRequest):
         return error_check_ret
 
     # Support for openAI official Completions API calls here.
-    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4":
-        return create_error_response(400, "model gpt-3.5-turbo and gpt-4 only can access with Completions api not ChatCompletions")
+    if request.model == "gpt-3.5-turbo" or request.model == "gpt-4" or request.model == "gpt-4o-mini":
+        return create_error_response(400, "model gpt-3.5-turbo and gpt-4 only can access with ChatCompletions api not Completions")
 
     if request.model == "gpt-3.5-turbo-instruct":
         openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -966,7 +966,7 @@ def create_openai_api_server():
 
     global model_outside_list
     if args.add_chatgpt:
-        model_outside_list += ["gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-4"]
+        model_outside_list += ["gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-4", "gpt-4o-mini"]
     if args.add_claude:
         model_outside_list += ["claude-2", "claude-instant-1"]
     if args.add_palm:
